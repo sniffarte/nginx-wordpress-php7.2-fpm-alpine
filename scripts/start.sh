@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+set -eo pipefail
 
 # Set custom webroot
 if [ ! -z "$WEBROOT" ]; then
