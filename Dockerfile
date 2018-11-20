@@ -1,81 +1,94 @@
 FROM php:7.2-fpm-alpine
 
-#### Nginx Install
-ENV NGINX_VERSION 1.14.0
+# docker-entrypoint.sh dependencies
+RUN apk add --no-cache \
+# in theory, docker-entrypoint.sh is POSIX-compliant, but priority is a working, consistent image
+		bash \
+# BusyBox sed is not sufficient for some of our sed expressions
+		sed
+
+ENV php_conf /usr/local/etc/php-fpm.conf
+ENV fpm_conf /usr/local/etc/php-fpm.d/www.conf
+ENV php_vars /usr/local/etc/php/conf.d/docker-vars.ini
+
+
+# Install nginx
+
+ENV NGINX_VERSION 1.14.1
 
 RUN GPG_KEYS=B0F4253373F8F6F510D42178520A9993A1C052F8 \
 	&& CONFIG="\
-	--prefix=/etc/nginx \
-	--sbin-path=/usr/sbin/nginx \
-	--modules-path=/usr/lib/nginx/modules \
-	--conf-path=/etc/nginx/nginx.conf \
-	--error-log-path=/var/log/nginx/error.log \
-	--http-log-path=/var/log/nginx/access.log \
-	--pid-path=/var/run/nginx.pid \
-	--lock-path=/var/run/nginx.lock \
-	--http-client-body-temp-path=/var/cache/nginx/client_temp \
-	--http-proxy-temp-path=/var/cache/nginx/proxy_temp \
-	--http-fastcgi-temp-path=/var/cache/nginx/fastcgi_temp \
-	--http-uwsgi-temp-path=/var/cache/nginx/uwsgi_temp \
-	--http-scgi-temp-path=/var/cache/nginx/scgi_temp \
-	--user=nginx \
-	--group=nginx \
-	--with-http_ssl_module \
-	--with-http_realip_module \
-	--with-http_addition_module \
-	--with-http_sub_module \
-	--with-http_dav_module \
-	--with-http_flv_module \
-	--with-http_mp4_module \
-	--with-http_gunzip_module \
-	--with-http_gzip_static_module \
-	--with-http_random_index_module \
-	--with-http_secure_link_module \
-	--with-http_stub_status_module \
-	--with-http_auth_request_module \
-	--with-http_xslt_module=dynamic \
-	--with-http_image_filter_module=dynamic \
-	--with-http_geoip_module=dynamic \
-	--with-threads \
-	--with-stream \
-	--with-stream_ssl_module \
-	--with-stream_ssl_preread_module \
-	--with-stream_realip_module \
-	--with-stream_geoip_module=dynamic \
-	--with-http_slice_module \
-	--with-mail \
-	--with-mail_ssl_module \
-	--with-compat \
-	--with-file-aio \
-	--with-http_v2_module \
+		--prefix=/etc/nginx \
+		--sbin-path=/usr/sbin/nginx \
+		--modules-path=/usr/lib/nginx/modules \
+		--conf-path=/etc/nginx/nginx.conf \
+		--error-log-path=/var/log/nginx/error.log \
+		--http-log-path=/var/log/nginx/access.log \
+		--pid-path=/var/run/nginx.pid \
+		--lock-path=/var/run/nginx.lock \
+		--http-client-body-temp-path=/var/cache/nginx/client_temp \
+		--http-proxy-temp-path=/var/cache/nginx/proxy_temp \
+		--http-fastcgi-temp-path=/var/cache/nginx/fastcgi_temp \
+		--http-uwsgi-temp-path=/var/cache/nginx/uwsgi_temp \
+		--http-scgi-temp-path=/var/cache/nginx/scgi_temp \
+		--user=nginx \
+		--group=nginx \
+		--with-http_ssl_module \
+		--with-http_realip_module \
+		--with-http_addition_module \
+		--with-http_sub_module \
+		--with-http_dav_module \
+		--with-http_flv_module \
+		--with-http_mp4_module \
+		--with-http_gunzip_module \
+		--with-http_gzip_static_module \
+		--with-http_random_index_module \
+		--with-http_secure_link_module \
+		--with-http_stub_status_module \
+		--with-http_auth_request_module \
+		--with-http_xslt_module=dynamic \
+		--with-http_image_filter_module=dynamic \
+		--with-http_geoip_module=dynamic \
+		--with-threads \
+		--with-stream \
+		--with-stream_ssl_module \
+		--with-stream_ssl_preread_module \
+		--with-stream_realip_module \
+		--with-stream_geoip_module=dynamic \
+		--with-http_slice_module \
+		--with-mail \
+		--with-mail_ssl_module \
+		--with-compat \
+		--with-file-aio \
+		--with-http_v2_module \
 	" \
 	&& addgroup -S nginx \
 	&& adduser -D -S -h /var/cache/nginx -s /sbin/nologin -G nginx nginx \
 	&& apk add --no-cache --virtual .build-deps \
-	gcc \
-	libc-dev \
-	make \
-	openssl-dev \
-	pcre-dev \
-	zlib-dev \
-	linux-headers \
-	curl \
-	gnupg \
-	libxslt-dev \
-	gd-dev \
-	geoip-dev \
+		gcc \
+		libc-dev \
+		make \
+		openssl-dev \
+		pcre-dev \
+		zlib-dev \
+		linux-headers \
+		curl \
+		gnupg1 \
+		libxslt-dev \
+		gd-dev \
+		geoip-dev \
 	&& curl -fSL https://nginx.org/download/nginx-$NGINX_VERSION.tar.gz -o nginx.tar.gz \
 	&& curl -fSL https://nginx.org/download/nginx-$NGINX_VERSION.tar.gz.asc  -o nginx.tar.gz.asc \
 	&& export GNUPGHOME="$(mktemp -d)" \
 	&& found=''; \
 	for server in \
-	ha.pool.sks-keyservers.net \
-	hkp://keyserver.ubuntu.com:80 \
-	hkp://p80.pool.sks-keyservers.net:80 \
-	pgp.mit.edu \
+		ha.pool.sks-keyservers.net \
+		hkp://keyserver.ubuntu.com:80 \
+		hkp://p80.pool.sks-keyservers.net:80 \
+		pgp.mit.edu \
 	; do \
-	echo "Fetching GPG key $GPG_KEYS from $server"; \
-	gpg --keyserver "$server" --keyserver-options timeout=10 --recv-keys "$GPG_KEYS" && found=yes && break; \
+		echo "Fetching GPG key $GPG_KEYS from $server"; \
+		gpg --keyserver "$server" --keyserver-options timeout=10 --recv-keys "$GPG_KEYS" && found=yes && break; \
 	done; \
 	test -z "$found" && echo >&2 "error: failed to fetch GPG key $GPG_KEYS" && exit 1; \
 	gpg --batch --verify nginx.tar.gz.asc nginx.tar.gz \
@@ -117,10 +130,10 @@ RUN GPG_KEYS=B0F4253373F8F6F510D42178520A9993A1C052F8 \
 	&& mv /usr/bin/envsubst /tmp/ \
 	\
 	&& runDeps="$( \
-	scanelf --needed --nobanner --format '%n#p' /usr/sbin/nginx /usr/lib/nginx/modules/*.so /tmp/envsubst \
-	| tr ',' '\n' \
-	| sort -u \
-	| awk 'system("[ -e /usr/local/lib/" $1 " ]") == 0 { next } { print "so:" $1 }' \
+		scanelf --needed --nobanner --format '%n#p' /usr/sbin/nginx /usr/lib/nginx/modules/*.so /tmp/envsubst \
+			| tr ',' '\n' \
+			| sort -u \
+			| awk 'system("[ -e /usr/local/lib/" $1 " ]") == 0 { next } { print "so:" $1 }' \
 	)" \
 	&& apk add --no-cache --virtual .nginx-rundeps $runDeps \
 	&& apk del .build-deps \
@@ -135,27 +148,71 @@ RUN GPG_KEYS=B0F4253373F8F6F510D42178520A9993A1C052F8 \
 	&& ln -sf /dev/stdout /var/log/nginx/access.log \
 	&& ln -sf /dev/stderr /var/log/nginx/error.log
 
+# Copy our nginx config
 RUN rm -Rf /etc/nginx/nginx.conf
-ADD conf/nginx.conf /etc/nginx/nginx.conf
+COPY conf/nginx.conf /etc/nginx/nginx.conf
 
 # nginx site conf
 RUN mkdir -p /etc/nginx/sites-available/ && \
-	mkdir -p /etc/nginx/sites-enabled/ && \
-	mkdir -p /etc/nginx/ssl/ && \
-	rm -Rf /var/www/* && \
-	mkdir /var/www/html/
-ADD conf/nginx-site.conf /etc/nginx/sites-available/default.conf
-ADD conf/nginx-site-ssl.conf /etc/nginx/sites-available/default-ssl.conf
+mkdir -p /etc/nginx/sites-enabled/ && \
+rm -Rf /var/www/* && \
+mkdir /var/www/html/
+COPY conf/nginx-site.conf /etc/nginx/sites-available/default.conf
 RUN ln -s /etc/nginx/sites-available/default.conf /etc/nginx/sites-enabled/default.conf
 
 
 
-# docker-entrypoint.sh dependencies
-RUN apk add --no-cache \
-# in theory, docker-entrypoint.sh is POSIX-compliant, but priority is a working, consistent image
-		bash \
-# BusyBox sed is not sufficient for some of our sed expressions
-		sed
+# End Install nginx
+
+
+RUN echo @testing http://nl.alpinelinux.org/alpine/edge/testing >> /etc/apk/repositories && \
+#    sed -i -e "s/v3.4/edge/" /etc/apk/repositories && \
+    echo /etc/apk/respositories && \
+    apk update && \
+    apk add --no-cache bash \
+    openssh-client \
+    wget \
+    supervisor \
+    curl \
+    libcurl \
+    git \
+    cups-client \
+    python \
+    python-dev \
+    py-pip \
+    augeas-dev \
+    openssl-dev \
+    ca-certificates \
+    dialog \
+    autoconf \
+    make \
+    gcc \
+    musl-dev \
+    linux-headers \
+    libmcrypt-dev \
+    libpng-dev \
+    icu-dev \
+    libpq \
+    libxslt-dev \
+    libffi-dev \
+    freetype-dev \
+    sqlite-dev \
+    libjpeg-turbo-dev
+
+
+RUN  mkdir -p /etc/nginx && \
+    mkdir -p /var/www/app && \
+    mkdir -p /run/nginx && \
+    mkdir -p /var/log/supervisor && \
+	pip install -U pip && \
+    apk del gcc musl-dev linux-headers libffi-dev augeas-dev python-dev make autoconf
+
+
+COPY conf/supervisord.conf /etc/supervisord.conf
+
+
+
+
 
 # install the PHP extensions we need
 RUN set -ex; \
@@ -188,10 +245,33 @@ RUN { \
 		echo 'opcache.enable_cli=1'; \
 	} > /usr/local/etc/php/conf.d/opcache-recommended.ini
 
+# tweak php-fpm config
+RUN echo "cgi.fix_pathinfo=0" > ${php_vars} &&\
+    echo "upload_max_filesize = 100M"  >> ${php_vars} &&\
+    echo "post_max_size = 100M"  >> ${php_vars} &&\
+    echo "variables_order = \"EGPCS\""  >> ${php_vars} && \
+    echo "memory_limit = 128M"  >> ${php_vars} && \
+    sed -i \
+        -e "s/;catch_workers_output\s*=\s*yes/catch_workers_output = yes/g" \
+        -e "s/pm.max_children = 5/pm.max_children = 4/g" \
+        -e "s/pm.start_servers = 2/pm.start_servers = 3/g" \
+        -e "s/pm.min_spare_servers = 1/pm.min_spare_servers = 2/g" \
+        -e "s/pm.max_spare_servers = 3/pm.max_spare_servers = 4/g" \
+        -e "s/;pm.max_requests = 500/pm.max_requests = 200/g" \
+        -e "s/user = www-data/user = nginx/g" \
+        -e "s/group = www-data/group = nginx/g" \
+        -e "s/;listen.mode = 0660/listen.mode = 0666/g" \
+        -e "s/;listen.owner = www-data/listen.owner = nginx/g" \
+        -e "s/;listen.group = www-data/listen.group = nginx/g" \
+        -e "s/listen = 127.0.0.1:9000/listen = \/var\/run\/php-fpm.sock/g" \
+        -e "s/^;clear_env = no$/clear_env = no/" \
+        ${fpm_conf}
+
+
 VOLUME /var/www/html
 
-ENV WORDPRESS_VERSION 4.9.7
-ENV WORDPRESS_SHA1 7bf349133750618e388e7a447bc9cdc405967b7d
+ENV WORDPRESS_VERSION 4.9.8
+ENV WORDPRESS_SHA1 0945bab959cba127531dceb2c4fed81770812b4f
 
 RUN set -ex; \
 	curl -o wordpress.tar.gz -fSL "https://wordpress.org/wordpress-${WORDPRESS_VERSION}.tar.gz"; \
@@ -201,70 +281,17 @@ RUN set -ex; \
 	rm wordpress.tar.gz; \
 	chown -R www-data:www-data /usr/src/wordpress
 
-RUN echo @testing http://nl.alpinelinux.org/alpine/edge/testing >> /etc/apk/repositories && \
-	echo /etc/apk/respositories && \
-	apk update && apk upgrade &&\
-	apk add --no-cache \
-	bash \
-	openssh-client \
-	wget \
-	supervisor \
-	curl \
-	libcurl \
-	git \
-	python \
-	python-dev \
-	py-pip \
-	augeas-dev \
-	libressl-dev \
-	ca-certificates \
-	dialog \
-	autoconf \
-	make \
-	gcc \
-	musl-dev \
-	linux-headers \
-	libmcrypt-dev \
-	libpng-dev \
-	icu-dev \
-	libpq \
-	libxslt-dev \
-	libffi-dev \
-	freetype-dev \
-	sqlite-dev \
-	libjpeg-turbo-dev && \
-	docker-php-ext-configure gd \
-	--with-gd \
-	--with-freetype-dir=/usr/include/ \
-	--with-png-dir=/usr/include/ \
-	--with-jpeg-dir=/usr/include/ && \
-	docker-php-ext-install iconv pdo_mysql pdo_sqlite mysqli gd exif intl xsl json soap dom zip opcache && \
-	docker-php-source delete && \
-	mkdir -p /etc/nginx && \
-	mkdir -p /var/www/app && \
-	mkdir -p /run/nginx && \
-	mkdir -p /var/log/supervisor && \
-	apk del gcc musl-dev linux-headers libffi-dev augeas-dev python-dev make autoconf
-#    apk del .sys-deps
-#    ln -s /usr/bin/php7 /usr/bin/php
-
-
-ADD conf/supervisord.conf /etc/supervisord.conf
-
-# Add Scripts
-ADD scripts/start.sh /start.sh
-RUN chmod 755 /start.sh
-
-# copy in code
-ADD src/ /var/www/html/
-ADD errors/ /var/www/errors
-
-EXPOSE 443 80
-
-WORKDIR "/var/www/html"
-
 COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod 755 /usr/local/bin/docker-entrypoint.sh
+
+RUN chown -R www-data:www-data /usr/src/wordpress
+
+COPY scripts/start.sh /start.sh
+RUN  chmod 755 /start.sh
+
 
 ENTRYPOINT ["docker-entrypoint.sh"]
+
+EXPOSE 80
 
 CMD ["/start.sh"]
