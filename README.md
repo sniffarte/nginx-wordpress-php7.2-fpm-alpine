@@ -1,5 +1,5 @@
 # Nginx Wordpress PHP 7.2 FPM Alpine
-Docker Image packaging for WordPress with PHP 7.2 FPM in Alpine.
+Docker Image packaging for WordPress with Nginx and PHP 7.2 FPM in Alpine.
 
 Fork from the officials Docker Repo. 
 
